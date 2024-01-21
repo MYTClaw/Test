@@ -1,0 +1,23 @@
+SELECT
+SUM(Salary) AS TotalSalary,
+MAX(Salary) AS MaxSalary,
+MIN(Salary) AS MinSalary,
+AVG(Salary) AS AvgSalary
+FROM EMPLO;
+
+SELECT
+SUM(E.Salary) AS TotalSalary,
+MAX(E.Salary) AS MaxSalary,
+MIN(E.Salary) AS MinSalary,
+AVG(E.Salary) AS AvgSalary
+FROM EMPLO E
+JOIN DEPARTMENT12 D ON E.DNO = D.DNO
+WHERE D.DNAME= 'RESEARCH';
+
+SELECT COUNT(*) AS TotalEmployees
+FROM EMPLO E
+JOIN DEPARTMENT12 D ON E.DNO = D.DNO
+WHERE D.DNAME = 'RESEARCH';
+
+SELECT COUNT(DISTINCT Salary) AS DistinctSalaryCount
+FROM EMPLO;
