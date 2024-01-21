@@ -1,0 +1,30 @@
+pip install pymongo
+
+from pymongo import MongoClient
+MongoConn = MongoClient()
+dsucollege = MongoConn'dsucollege']
+students = dsucollege['students']
+
+Create:
+students.insert_one({"firstName": "Student","lastName":"One","age": 20,"marks": 85})
+
+students.insert_many([{"firstName":"Student","lastName":"Two","age": 22,"marks": 90},{"firstName":"Student","lastName": "Three","age": 21,"marks": 75}])
+
+Read:
+all_records = students.find()
+print(list(all_records))
+
+result = students.find_one({"age": 22})
+print(result)
+
+Update:
+students.update_one({"age": 21},{"$set": {"marks": 100}})
+
+Update:
+students.update_many({},{"$inc": {"marks": 99}})
+
+Delete:
+students.delete_one({"age": 22})
+
+Delete:
+students.delete_many({})
