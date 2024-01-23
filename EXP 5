@@ -1,41 +1,62 @@
-SELECT *
-FROM EMPLO
-WHERE Address LIKE '%BANGALORE%';
+(method overloading and overriding)
 
-SELECT *
-FROM EMPLO
-WHERE Bdate BETWEEN '01/JAN/1990' AND '31/DEC/1994';
+package com.techvidvan.methodoverriding;
+public class Addition
+{
+int add(int a, int b)
+{
+return (a + b);
+}
+int add(int a , int b , int c)
+{
+return (a + b + c) ;
+}
+double add(double a , double b)
+{
+return (a + b);
+}
+double add(int a , double b)
+{
+return (a + b);
+}
+public static void main( String args[])
+{
+Addition ob = new Addition();
+System.out.println("Calling add method with two int parameters: " +ob.add(17,
+25));
+System.out.println("Calling add method with three int parameters: "
++ob.add(55, 27, 35));
+System.out.println("Calling add method with two double parameters: "
++ob.add(36.5, 42.8));
+System.out.println("Calling add method with one int and one double
+parameter: " +ob.add(11, 24.5));
+}
 
-UPDATE EMPLO
-SET Salary = Salary * 1.10
-WHERE SSN IN (SELECT SSN FROM WORKS_ON12 WHERE Pno = (SELECT PNO FROM PROJECT12 WHERE Pname ='CLOUD'));
-
-SELECT * FROM EMPLO;
-
-SELECT E.Fname, E.Lname, P.Pname
-FROM EMPLO E
-JOIN WORKS_ON12 W ON E.SSN = W.SSN
-JOIN PROJECT12 P ON W.PNO = P.PNO
-ORDER BY E.DNO;
-
-SELECT * FROM DEPT_LOCATION12;
-UPDATE DEPT_LOCATION12
-SET Dloc = 'BELLAIRE';
-WHERE DNO IN (SELECT DNO FROM EMPLOYEE WHERE Address LIKE '%BANGALORE');
-
-SELECT * FROM DEPT_LOCATION12;
-SELECT * FROM PROJECT12;
-
-UPDATE PROJECT12
-SET DNO = 5
-WHERE PNO = 103;
-
-SELECT * FROM PROJECT12;
-
-CREATE VIEW WORKSON123 AS
-SELECT E.Fname, E.Lname, P.Pname, W.Hours
-FROM EMPLOYEE E
-JOIN WORKS_ON W ON E.SSN = W.SSN
-JOIN PROJECT1 P ON W.Pno = P.PNO;
-
-SELECT * FROM WORKSON123;
+package com.techvidvan. methodoverriding;
+//Base Class
+class Parent
+{
+void view()
+{
+System.out.println("This is a parent class method");
+}
+}
+class Child extends Parent
+{
+@Override
+void view()
+{
+System.out.println("This is a child class method");
+}
+}
+//Driver class
+public class MethodOverriding
+{
+public static void main(String args[])
+{
+Parent obj = new Parent();
+obj.view();
+Parent obj1 = new Child();
+obj1.view();
+}
+}
