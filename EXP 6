@@ -1,34 +1,65 @@
-CREATE TABLE EMP_3(NAME VARCHAR(50),AGE NUMBER,SALARY NUMBER,COMM NUMBER,DNO NUMBER);
+(garbage collection)
 
-INSERT INTO EMP_3 VALUES('ANU',21,10000,3500,20);
-SELECT * FROM EMP_3;
-CREATE OR REPLACE TRIGGER EMP_COMM_TRIG2
-BEFORE INSERT ON EMP_3
-FOR EACH ROW
-BEGIN
-IF :NEW.DNO = 30 THEN
-:NEW.COMM := :NEW.SALARY * 0.1;
-ELSE
-:NEW.COMM := NULL;
-END IF;
-END;
+class Employee
+{
+private int ID;
+private String name;
+private int age;
+private static int nextId = 1;
+// it is made static because it
+// is keep common among all and
+// shared by all objects
+public Employee(String name, int age)
+{
+this.name = name;
+this.age = age;
+this.ID = nextId++;
+}
+public void show()
+{
+System.out.println("Id=" + ID + "\nName=" + name
++ "\nAge=" + age);
+}
+public void showNextId()
+{
+System.out.println("Next employee id will be="
++ nextId);
+}
+protected void finalize()
+{
+--nextId;
+// In this case,
+// gc will call finalize()
+// for 2 times for 2 objects.
 
-INSERT INTO EMP_3 VALUES('MANJU',20,15000,3000,30);
-SELECT * FROM EMP_3;
-
-CREATE TABLE EMP_126(EMP_ID NUMBER,EMPNAME VARCHAR(20),ACTION VARCHAR(50),CHANGE_date DATE);
-CREATE TABLE EMP_306(EMP_ID NUMBER,EMPNAME VARCHAR(20),ACTION VARCHAR(50),CHANGE_date DATE);
-INSERT INTO EMP_126 VALUES(121,'ARYA','INSERT','05/JAN/2020');
-SELECT * FROM EMP_126;
-
-CREATE OR REPLACE TRIGGER EMP_DEL_TRIG4
-AFTER DELETE ON EMP_126
-FOR EACH ROW
-BEGIN
-INSERT INTO EMP_306(EMP_ID,EMPNAME,ACTION,CHANGE_date)
-VALUES (:OLD.EMP_ID, :OLD.EMPNAME,'DELETE',SYSTIMESTAMP);
-END;
-
-DELETE FROM EMP_126 WHERE EMP_ID=121;
-SELECT * FROM EMP_306 WHERE EMP_ID=121;
-
+}
+}
+public class UseEmployee
+{
+public static void main(String[] args)
+{
+Employee E = new Employee("GFG1", 56);
+Employee F = new Employee("GFG2", 45);
+Employee G = new Employee("GFG3", 25);
+E.show();
+F.show();
+G.show();
+E.showNextId();
+F.showNextId();
+G.showNextId();
+{
+// It is sub block to keep
+// all those interns.
+Employee X = new Employee("GFG4", 23);
+Employee Y = new Employee("GFG5", 21);
+X.show();
+Y.show();
+X.showNextId();
+Y.showNextId();
+X = Y = null;
+System.gc();
+System.runFinalization();
+}
+E.showNextId();
+}
+}
