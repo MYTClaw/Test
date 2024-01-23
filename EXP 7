@@ -1,30 +1,38 @@
-pip install pymongo
+(Exception Handling)
 
-from pymongo import MongoClient
-MongoConn = MongoClient()
-dsucollege = MongoConn'dsucollege']
-students = dsucollege['students']
+import java.util.*;
+public class ExceptionDemo
+{
+static void func(int a,int b) throws ArithmeticException,
+ArrayIndexOutOfBoundsException
+{
+System.out.println(10/a);
+int[] arr={1,2,3};
+System.out.println(arr[b]);
+}
+public static void main (String[] args)
+{
 
-Create:
-students.insert_one({"firstName": "Student","lastName":"One","age": 20,"marks": 85})
+Scanner in=new Scanner(System.in);
+for(int i=0;i<3;i++){
+try
+{
+func(in.nextInt(),in.nextInt());
 
-students.insert_many([{"firstName":"Student","lastName":"Two","age": 22,"marks": 90},{"firstName":"Student","lastName": "Three","age": 21,"marks": 75}])
+}
 
-Read:
-all_records = students.find()
-print(list(all_records))
+catch(ArithmeticException e)
+{
 
-result = students.find_one({"age": 22})
-print(result)
+System.out.println("can't divide by zero");
+}
 
-Update:
-students.update_one({"age": 21},{"$set": {"marks": 100}})
+catch(ArrayIndexOutOfBoundsException e)
+{
 
-Update:
-students.update_many({},{"$inc": {"marks": 99}})
+System.out.println("Out of bounds!");
 
-Delete:
-students.delete_one({"age": 22})
-
-Delete:
-students.delete_many({})
+}
+}
+}
+}
