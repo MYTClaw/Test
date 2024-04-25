@@ -1,0 +1,52 @@
+
+
+Program 5 :
+Lex Part :
+%{
+#include "y.tab.h"
+%}
+%%
+[a-zA-Z] return L;
+[0-9] return D;
+%%
+
+int yywrap()
+{
+return 1;
+}
+
+Yacc Part :
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+int yyerror();
+%}
+%token L D
+
+%%
+var:L E {printf("Valid Variable\n");return 0;}
+E:E L;
+|E D;
+|;
+%%
+
+int main()
+{
+printf("Type the variable\n");
+yyparse();
+return 0;
+}
+int yyerror()
+{
+printf("Invalid varialble\n");
+exit(0);
+}
+Output Commands :
+lex prog5.l
+yacc -d prog5.y
+gcc lex.yy.c y.tab.c
+./a.out
+
+
+

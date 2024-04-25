@@ -1,0 +1,45 @@
+Program 6 :
+Lex Code :
+%{
+#include "y.tab.h"
+%}
+%%
+a return A;
+b return B;
+. return yytext[0];
+\n return yytext[0];
+%%
+ 
+Yacc Code :
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+%token A B
+%%
+Str:S '\n' {return 0;}
+S:A S B;
+| ;
+%%
+int main()
+{
+printf("Type the String \n");
+if(!yyparse())
+printf("Valid String\n");
+return 0;
+}
+int yywrap() {
+  return 1;
+}
+int yyerror()
+{
+printf("Invalid String");
+exit(0);
+}
+
+Output Statements :
+lex prog6.l
+yacc  -d prog6.y
+gcc lex.yy.c y.tab.c
+./a.out
+

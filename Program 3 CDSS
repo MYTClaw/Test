@@ -1,0 +1,77 @@
+Program 3: 
+Part A :
+%{
+#include<stdio.h>
+int pi=0,ni=0,pf=0,nf=0;
+%}
+%%
+[-][0-9]+ {ni++;}
+[+]?[0-9]+ {pi++;}
+[-][0-9]*\.[0-9]+ {nf++;}
+[+]?[0-9]*\.[0-9]+ {pf++;}
+%%
+void main(int argc,char *argv[])
+{
+if(argc!=2)
+{
+printf("usage :./a.out in.txt \n");
+exit(0);
+}
+yyin=fopen(argv[1],"r");
+yylex();
+printf("Number of positive integer %d\n",pi);
+printf("Number of negative integer %d\n",ni);
+printf("Number of positive fraction %d\n",pf);
+printf("Number of negative fraction %d\n",nf);
+}
+int yywrap(){
+return 1;
+}
+Output Statements : 
+gedit in.txt
+1
+2
+-64
+-8
+8.73
+3.92
+-8.38
+lex prog3a.l
+cc lex.yy.c -ll
+./a.out in.txt
+
+Part B :
+%{
+#include<stdio.h>
+int sf=0,pf=0;
+%}
+%%
+"scanf" {sf++; fprintf(yyout,"readf");}
+"printf" {pf++; fprintf(yyout,"writef");}
+%%
+int main()
+{
+yyin=fopen("f1.c","r");
+yyout=fopen("f2.c","w");
+yylex();
+printf("no of scanf =%d\n no of printf =%d\n",sf,pf);
+return 0;
+}
+
+Output : gedit f1.c
+#include <stdio.h>
+int main()
+{
+int a,b,c;
+printf("Enter the Values of A and B\n");
+scanf("%d%d",&a,&b);
+c=a+b;
+printf("Sum=%d",c);
+return 0;
+}
+gedit f2.c
+lex prog3b.l
+cc lex.yy.c -ll
+./a.out
+
+
