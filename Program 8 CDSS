@@ -1,0 +1,60 @@
+Program 8 
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+int main() {
+    FILE *fp;
+    char line[50];
+    char name[10], namel[10];
+
+    printf("Enter program name: ");
+    scanf("%s", name);
+
+    fp = fopen("abssrc.txt", "r");
+    if (fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
+
+    fscanf(fp, "%s", line);
+    strncpy(namel, line + 2, 6);
+    namel[6] = '\0';
+    printf("Name from obj: %s\n", namel);
+
+    if (strcmp(name, namel) == 0) {
+        while (fscanf(fp, "%s", line) != EOF) {
+            if (line[0] == 'T') {
+                // Parse Text Record
+                int staddrl = atoi(line + 8);
+                int i = 12;
+                while (line[i] != '$') {
+                    if (line[i] != '^') {
+                        printf("00%d\t%c%c\n", staddrl, line[i], line[i+1]);
+                        staddrl++;
+                        i += 2;
+                    } else {
+                        i++;
+                    }
+                }
+            } else if (line[0] == 'E') {
+                break; // End of program
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+abssrc.txt:
+H^SAMPLE^001000^0035
+T^001000^0C^001003^071009$
+T^0020000^03^111111$
+E^001000
+
+gedit a.c
+gcc a.c
+./a.out
+enter program sample
