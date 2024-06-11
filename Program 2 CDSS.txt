@@ -1,0 +1,59 @@
+Program 2 : 
+Part A :
+
+%{
+#include<stdio.h>
+int s=0,m=0;
+%}
+%%
+"/*"[a-zA-Z0-9' '\t\n]*"*/" m++;
+"//".* s++;
+%%
+void main(){
+yyin=fopen("f1.txt","r");
+yyout=fopen("f2.txt","w");
+yylex();
+fclose(yyin);
+fclose(yyout);
+printf("no of single line comments=%d\n",s);
+printf("no of multi line comments=%d\n",m);
+}
+int yywrap()
+{
+return 1;
+}
+
+Output Statements :
+gedit f1.txt
+Write a c program with comments;
+lex prog2a.l
+cc lex.yy.c -ll
+./a.out
+
+Part B :
+%{
+#include<stdio.h>
+int c=0;
+%}
+%%
+[a-zA-Z]*[ ](and|or|but|yet|so)[ ][a-zA-Z]* {c=1;}
+.|[\n];
+%%
+int yywrap()
+{
+return 1;
+}
+void main(){
+printf("enter the text\n");
+yylex();
+if(c)
+{
+printf("The given statement is compound\n");
+}
+else
+{
+printf("The given statement is simple\n");
+}
+}
+
+
