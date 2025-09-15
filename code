@@ -5,13 +5,11 @@ from gi.repository import Gst, GLib
 def src_pad_added(src, new_pad, muxer):
     sink_pad = muxer.get_request_pad("sink_0")
     if not sink_pad:
-        print("Failed to request nvstreammux sink_0 pad")
-        return
-    if sink_pad.is_linked():
-        return
-    ret = new_pad.link(sink_pad)
-    if ret != Gst.PadLinkReturn.OK:
-        print(f"Failed to link srcbin->mux: {ret}")
+        print("Failed to request nvstreammux sink_0 pad"); return
+    if not sink_pad.is_linked():
+        ret = new_pad.link(sink_pad)
+        if ret != Gst.PadLinkReturn.OK:
+            print(f"Failed to link srcbin->mux: {ret}")
 
 def bus_call(bus, message, loop):
     t = message.type
@@ -23,27 +21,20 @@ def bus_call(bus, message, loop):
     return True
 
 def main():
-    # EDIT THESE TWO LINES
-    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"
-    cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"
+    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"   # EDIT
+    cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"  # EDIT
 
     Gst.init(None)
     pipeline = Gst.Pipeline.new("rtsp-ds-pipeline")
 
-    # Robust RTSP source + decode with reconnect and TCP
     srcbin = Gst.ElementFactory.make("nvurisrcbin", "srcbin")
     srcbin.set_property("uri", rtsp_uri)
     srcbin.set_property("select-rtp-protocol", 4)       # rtp-tcp
-    srcbin.set_property("latency", 200)                 # ms jitterbuffer
+    srcbin.set_property("latency", 300)                 # 200–500 typical
     srcbin.set_property("rtsp-reconnect-interval", 10)  # seconds
     srcbin.set_property("rtsp-reconnect-attempts", -1)  # infinite
-    srcbin.set_property("drop-on-latency", True)        # don’t exceed latency
-    srcbin.set_property("num-extra-surfaces", 3)        # extra decode buffers
-    # Optional stability levers on Jetson:
-    # srcbin.set_property("dec-skip-frames", 0)         # 0=decode all, 1=skip non-ref, 2=key-frames-only
-    # If credentials can’t be URL-encoded:
-    # srcbin.set_property("user-id", "user")
-    # srcbin.set_property("user-pw", "pass")
+    srcbin.set_property("drop-on-latency", True)
+    srcbin.set_property("num-extra-surfaces", 8)        # more decode buffers
 
     streammux = Gst.ElementFactory.make("nvstreammux", "mux")
     streammux.set_property("batch-size", 1)
@@ -61,15 +52,12 @@ def main():
 
     for e in [srcbin, streammux, pgie, nvvidconv, nvosd, sink]:
         if not e:
-            print("Failed to create a GStreamer element"); return
+            print("Failed to create an element"); return
 
-    pipeline.add(srcbin); pipeline.add(streammux)
-    pipeline.add(pgie); pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
+    pipeline.add(srcbin); pipeline.add(streammux); pipeline.add(pgie)
+    pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
 
-    # Dynamic link: srcbin src pad -> mux sink_0
     srcbin.connect("pad-added", src_pad_added, streammux)
-
-    # Downstream links
     if not streammux.link(pgie): print("link mux->pgie failed"); return
     if not pgie.link(nvvidconv): print("link pgie->conv failed"); return
     if not nvvidconv.link(nvosd): print("link conv->osd failed"); return
@@ -81,10 +69,8 @@ def main():
 
     print("Starting pipeline")
     pipeline.set_state(Gst.State.PLAYING)
-    try:
-        loop.run()
-    except KeyboardInterrupt:
-        pass
+    try: loop.run()
+    except KeyboardInterrupt: pass
     pipeline.set_state(Gst.State.NULL)
 
 if __name__ == "__main__":
