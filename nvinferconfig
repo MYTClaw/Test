@@ -8,6 +8,13 @@ labelfile-path=/opt/nvidia/deepstream/deepstream-7.1/samples/models/Primary_Dete
 batch-size=1
 cluster-mode=2
 
+# REQUIRED to avoid “Unique ID not set”
+gie-unique-id=1
+
+# TrafficCamNet/DetectNet_v2 style outputs and class count
+num-detected-classes=4
+output-blob-names=output_cov/Sigmoid;output_bbox/BiasAdd
+
 [class-attrs-all]
 pre-cluster-threshold=0.3
 nms-iou-threshold=0.5
