@@ -2,82 +2,75 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
-def pad_added_handler(src, new_pad, depay):
-    caps = new_pad.get_current_caps()
-    if caps:
-        s = caps.get_structure(0)
-        if s and s.get_name() == 'application/x-rtp':
-            sink_pad = depay.get_static_pad('sink')
-            if sink_pad and not sink_pad.is_linked():
-                new_pad.link(sink_pad)
+def src_pad_added(src, new_pad, muxer):
+    # Link nvurisrcbin's dynamic src pad to nvstreammux sink_0
+    sink_pad = muxer.get_request_pad("sink_0")
+    if not sink_pad:
+        print("Failed to request nvstreammux sink_0 pad")
+        return
+    if sink_pad.is_linked():
+        return
+    ret = new_pad.link(sink_pad)
+    if ret != Gst.PadLinkReturn.OK:
+        print(f"Failed to link srcbin->mux: {ret}")
 
 def bus_call(bus, message, loop):
     t = message.type
     if t == Gst.MessageType.EOS:
-        print("End-of-stream")
-        loop.quit()
+        print("End-of-stream"); loop.quit()
     elif t == Gst.MessageType.ERROR:
         err, debug = message.parse_error()
-        print(f"Error: {err}, {debug}")
-        loop.quit()
+        print(f"Error: {err}, {debug}"); loop.quit()
     return True
 
 def main():
     # EDIT THESE TWO LINES
-    rtsp_uri = "rtsp://user:pass@host:port/stream"
-    cfg_path = "/opt/nvidia/deepstream/deepstream-7.1/samples/configs/config_infer_primary_trafficcamnet.txt"
+    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"
+    cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"
 
     Gst.init(None)
     pipeline = Gst.Pipeline.new("rtsp-ds-pipeline")
 
-    source = Gst.ElementFactory.make("rtspsrc", "src")
-    source.set_property("location", rtsp_uri)
-    # Optional network tuning:
-    # source.set_property("latency", 200)
-    # source.set_property("drop-on-latency", True)
-
-    depay   = Gst.ElementFactory.make("rtph264depay", "depay")
-    parse   = Gst.ElementFactory.make("h264parse", "parse")
-    decoder = Gst.ElementFactory.make("nvv4l2decoder", "decoder")
+    # nvurisrcbin handles RTSP + depay + parse + HW decode, with reconnect
+    srcbin = Gst.ElementFactory.make("nvurisrcbin", "srcbin")
+    srcbin.set_property("uri", rtsp_uri)
+    srcbin.set_property("select-rtp-protocol", 4)      # 4 = rtp-tcp (TCP only)
+    srcbin.set_property("latency", 200)                # ms jitterbuffer
+    srcbin.set_property("rtsp-reconnect-interval", 10) # seconds
+    srcbin.set_property("rtsp-reconnect-attempts", -1) # infinite retries
+    # Optional if URI auth is tricky:
+    # srcbin.set_property("user-id", "user")
+    # srcbin.set_property("user-pw", "pass")
 
     streammux = Gst.ElementFactory.make("nvstreammux", "mux")
     streammux.set_property("batch-size", 1)
     streammux.set_property("live-source", 1)
-    streammux.set_property("width", 1280)   # REQUIRED
-    streammux.set_property("height", 720)   # REQUIRED
-    # streammux.set_property("enable-padding", 1)  # optional to preserve aspect
+    streammux.set_property("width", 1280)
+    streammux.set_property("height", 720)
 
     pgie = Gst.ElementFactory.make("nvinfer", "pgie")
     pgie.set_property("config-file-path", cfg_path)
 
     nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "conv")
     nvosd     = Gst.ElementFactory.make("nvdsosd", "osd")
-
-    sink = Gst.ElementFactory.make("fakesink", "sink")
+    sink      = Gst.ElementFactory.make("fakesink", "sink")
     sink.set_property("sync", False)
 
-    for e in [source, depay, parse, decoder, streammux, pgie, nvvidconv, nvosd, sink]:
+    for e in [srcbin, streammux, pgie, nvvidconv, nvosd, sink]:
         if not e:
-            print("Failed to create an element"); return
+            print("Failed to create a GStreamer element"); return
 
-    pipeline.add(source); pipeline.add(depay); pipeline.add(parse); pipeline.add(decoder)
-    pipeline.add(streammux); pipeline.add(pgie); pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
+    pipeline.add(srcbin); pipeline.add(streammux)
+    pipeline.add(pgie); pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
 
-    if not depay.link(parse): print("link depay->parse failed"); return
-    if not parse.link(decoder): print("link parse->decoder failed"); return
+    # Dynamic link: srcbin src pad -> mux sink_0
+    srcbin.connect("pad-added", src_pad_added, streammux)
 
-    # Request pad sink_0 on nvstreammux and link decoder -> mux
-    dec_src = decoder.get_static_pad("src")
-    mux_sink = streammux.get_request_pad("sink_0")
-    if not dec_src or not mux_sink or dec_src.link(mux_sink) != Gst.PadLinkReturn.OK:
-        print("link decoder->mux sink_0 failed"); return
-
+    # Downstream static links
     if not streammux.link(pgie): print("link mux->pgie failed"); return
     if not pgie.link(nvvidconv): print("link pgie->conv failed"); return
     if not nvvidconv.link(nvosd): print("link conv->osd failed"); return
     if not nvosd.link(sink): print("link osd->sink failed"); return
-
-    source.connect("pad-added", pad_added_handler, depay)
 
     loop = GLib.MainLoop()
     bus = pipeline.get_bus(); bus.add_signal_watch()
