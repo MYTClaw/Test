@@ -24,13 +24,16 @@ def bus_call(bus, message, loop):
     return True
 
 def main():
-    if len(sys.argv) != 4:
-        print("Usage: python3 script.py <rtsp_uri> <engine_path> <labels_path>")
+    if len(sys.argv) != 2:
+        print("Usage: python3 script.py <rtsp_uri>")
         sys.exit(1)
 
     rtsp_uri = sys.argv[1]
-    engine_path = sys.argv[2]
-    labels_path = sys.argv[3]
+
+    # Hardcoded paths based on the provided directory
+    model_dir = "/opt/nvidia/deepstream/deepstream-7.1/samples/models/Primary_Detector"
+    engine_path = f"{model_dir}/resnet18_trafficcamnet_pruned.onnx_b1_gpu0_fp16.engine"
+    labels_path = f"{model_dir}/labels.txt"
 
     Gst.init(None)
 
@@ -62,11 +65,10 @@ def main():
     pgie.set_property("gpu-id", 0)
     pgie.set_property("net-scale-factor", 0.00392156862745098)  # 1/255.0
     pgie.set_property("model-color-format", 0)  # RGB
-    pgie.set_property("on-board", False)
     pgie.set_property("batch-size", 1)
     pgie.set_property("network-mode", 2)  # FP16
     pgie.set_property("network-type", 0)  # Primary detector
-    pgie.set_property("num-detected-classes", 4)  # Car, Person, Bicycle, Sign
+    pgie.set_property("num-detected-classes", 4)  # Car, Person, Bicycle, Road Sign
     pgie.set_property("interval", 0)  # Infer on every frame
     pgie.set_property("gie-unique-id", 1)
     pgie.set_property("process-mode", 1)  # Primary
