@@ -3,7 +3,6 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
 def src_pad_added(src, new_pad, muxer):
-    # Link nvurisrcbin's dynamic src pad to nvstreammux sink_0
     sink_pad = muxer.get_request_pad("sink_0")
     if not sink_pad:
         print("Failed to request nvstreammux sink_0 pad")
@@ -31,14 +30,18 @@ def main():
     Gst.init(None)
     pipeline = Gst.Pipeline.new("rtsp-ds-pipeline")
 
-    # nvurisrcbin handles RTSP + depay + parse + HW decode, with reconnect
+    # Robust RTSP source + decode with reconnect and TCP
     srcbin = Gst.ElementFactory.make("nvurisrcbin", "srcbin")
     srcbin.set_property("uri", rtsp_uri)
-    srcbin.set_property("select-rtp-protocol", 4)      # 4 = rtp-tcp (TCP only)
-    srcbin.set_property("latency", 200)                # ms jitterbuffer
-    srcbin.set_property("rtsp-reconnect-interval", 10) # seconds
-    srcbin.set_property("rtsp-reconnect-attempts", -1) # infinite retries
-    # Optional if URI auth is tricky:
+    srcbin.set_property("select-rtp-protocol", 4)       # rtp-tcp
+    srcbin.set_property("latency", 200)                 # ms jitterbuffer
+    srcbin.set_property("rtsp-reconnect-interval", 10)  # seconds
+    srcbin.set_property("rtsp-reconnect-attempts", -1)  # infinite
+    srcbin.set_property("drop-on-latency", True)        # don’t exceed latency
+    srcbin.set_property("num-extra-surfaces", 3)        # extra decode buffers
+    # Optional stability levers on Jetson:
+    # srcbin.set_property("dec-skip-frames", 0)         # 0=decode all, 1=skip non-ref, 2=key-frames-only
+    # If credentials can’t be URL-encoded:
     # srcbin.set_property("user-id", "user")
     # srcbin.set_property("user-pw", "pass")
 
@@ -66,7 +69,7 @@ def main():
     # Dynamic link: srcbin src pad -> mux sink_0
     srcbin.connect("pad-added", src_pad_added, streammux)
 
-    # Downstream static links
+    # Downstream links
     if not streammux.link(pgie): print("link mux->pgie failed"); return
     if not pgie.link(nvvidconv): print("link pgie->conv failed"); return
     if not nvvidconv.link(nvosd): print("link conv->osd failed"); return
