@@ -59,7 +59,6 @@ def main():
     mux.set_property("live-source", True)
 
     pgie = Gst.ElementFactory.make("nvinfer", "primary-inference")
-    pgie.set_property("config-file-path", None)  # Using direct properties
     pgie.set_property("model-engine-file", engine_path)
     pgie.set_property("labelfile-path", labels_path)
     pgie.set_property("gpu-id", 0)
@@ -67,15 +66,14 @@ def main():
     pgie.set_property("model-color-format", 0)  # RGB
     pgie.set_property("batch-size", 1)
     pgie.set_property("network-mode", 2)  # FP16
-    pgie.set_property("network-type", 0)  # Primary detector
     pgie.set_property("num-detected-classes", 4)  # Car, Person, Bicycle, Road Sign
     pgie.set_property("interval", 0)  # Infer on every frame
     pgie.set_property("gie-unique-id", 1)
     pgie.set_property("process-mode", 1)  # Primary
-    pgie.set_property("input-dims", "3;960;544;0")  # CHW format
     pgie.set_property("output-blob-names", "output_bbox/BiasAdd;output_cov/Sigmoid")
+    pgie.set_property("parse-bbox-func-name", "NvDsInferParseCustomResnet")
+    pgie.set_property("custom-lib-path", "/opt/nvidia/deepstream/deepstream-7.1/lib/libnvds_infercustomparser_resnet.so")
     pgie.set_property("maintain-aspect-ratio", 1)
-    pgie.set_property("parse-bbox-func-name", "NMS_5")  # For DetectNet_v2
 
     sink = Gst.ElementFactory.make("fakesink", "fake-sink")
     sink.set_property("sync", False)
