@@ -14,6 +14,7 @@ def pad_added_handler(src, new_pad, depay):
 def bus_call(bus, message, loop):
     t = message.type
     if t == Gst.MessageType.EOS:
+        print("End-of-stream")
         loop.quit()
     elif t == Gst.MessageType.ERROR:
         err, debug = message.parse_error()
@@ -31,6 +32,9 @@ def main():
 
     source = Gst.ElementFactory.make("rtspsrc", "src")
     source.set_property("location", rtsp_uri)
+    # Optional network tuning:
+    # source.set_property("latency", 200)
+    # source.set_property("drop-on-latency", True)
 
     depay   = Gst.ElementFactory.make("rtph264depay", "depay")
     parse   = Gst.ElementFactory.make("h264parse", "parse")
@@ -39,6 +43,9 @@ def main():
     streammux = Gst.ElementFactory.make("nvstreammux", "mux")
     streammux.set_property("batch-size", 1)
     streammux.set_property("live-source", 1)
+    streammux.set_property("width", 1280)   # REQUIRED
+    streammux.set_property("height", 720)   # REQUIRED
+    # streammux.set_property("enable-padding", 1)  # optional to preserve aspect
 
     pgie = Gst.ElementFactory.make("nvinfer", "pgie")
     pgie.set_property("config-file-path", cfg_path)
@@ -59,6 +66,7 @@ def main():
     if not depay.link(parse): print("link depay->parse failed"); return
     if not parse.link(decoder): print("link parse->decoder failed"); return
 
+    # Request pad sink_0 on nvstreammux and link decoder -> mux
     dec_src = decoder.get_static_pad("src")
     mux_sink = streammux.get_request_pad("sink_0")
     if not dec_src or not mux_sink or dec_src.link(mux_sink) != Gst.PadLinkReturn.OK:
