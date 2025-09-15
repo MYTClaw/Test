@@ -2,14 +2,22 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
-def src_pad_added(src, new_pad, muxer):
-    sink_pad = muxer.get_request_pad("sink_0")
-    if not sink_pad:
-        print("Failed to request nvstreammux sink_0 pad"); return
-    if not sink_pad.is_linked():
-        ret = new_pad.link(sink_pad)
+def on_pad_added(udbin, new_pad, queue):
+    # Link only the first raw video pad, ignore audio/others
+    caps = new_pad.get_current_caps()
+    if not caps:
+        return
+    s = caps.get_structure(0)
+    if not s:
+        return
+    name = s.get_name()
+    if name != "video/x-raw":
+        return
+    sink = queue.get_static_pad("sink")
+    if sink and not sink.is_linked():
+        ret = new_pad.link(sink)
         if ret != Gst.PadLinkReturn.OK:
-            print(f"Failed to link srcbin->mux: {ret}")
+            print(f"Failed to link uridecodebin -> queue: {ret}")
 
 def bus_call(bus, message, loop):
     t = message.type
@@ -21,53 +29,71 @@ def bus_call(bus, message, loop):
     return True
 
 def main():
-    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"   # EDIT
+    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"  # EDIT
     cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"  # EDIT
 
     Gst.init(None)
-    pipeline = Gst.Pipeline.new("rtsp-ds-pipeline")
+    pipeline = Gst.Pipeline.new("rtsp-ds-swdec")
 
-    srcbin = Gst.ElementFactory.make("nvurisrcbin", "srcbin")
-    srcbin.set_property("uri", rtsp_uri)
-    srcbin.set_property("select-rtp-protocol", 4)       # rtp-tcp
-    srcbin.set_property("latency", 300)                 # 200–500 typical
-    srcbin.set_property("rtsp-reconnect-interval", 10)  # seconds
-    srcbin.set_property("rtsp-reconnect-attempts", -1)  # infinite
-    srcbin.set_property("drop-on-latency", True)
-    srcbin.set_property("num-extra-surfaces", 8)        # more decode buffers
+    # Source/Decode: force software decoders (avdec_h264), output raw video
+    udbin = Gst.ElementFactory.make("uridecodebin", "uridecodebin")
+    udbin.set_property("uri", rtsp_uri)
+    udbin.set_property("force-sw-decoders", True)
+    udbin.set_property("caps", Gst.Caps.from_string("video/x-raw"))
 
-    streammux = Gst.ElementFactory.make("nvstreammux", "mux")
-    streammux.set_property("batch-size", 1)
-    streammux.set_property("live-source", 1)
-    streammux.set_property("width", 1280)
-    streammux.set_property("height", 720)
+    # Preproc to NVMM for nvstreammux
+    q_pre  = Gst.ElementFactory.make("queue", "preq")
+    vconv  = Gst.ElementFactory.make("videoconvert", "vconv")
+    nvconv = Gst.ElementFactory.make("nvvideoconvert", "nvconv")
+    to_nvmm = Gst.ElementFactory.make("capsfilter", "to-nvmm")
+    to_nvmm.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM), format=NV12"))
+
+    # DeepStream mux + inference
+    mux = Gst.ElementFactory.make("nvstreammux", "mux")
+    mux.set_property("batch-size", 1)
+    mux.set_property("live-source", 1)
+    mux.set_property("width", 1280)
+    mux.set_property("height", 720)
 
     pgie = Gst.ElementFactory.make("nvinfer", "pgie")
     pgie.set_property("config-file-path", cfg_path)
 
     nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "conv")
-    nvosd     = Gst.ElementFactory.make("nvdsosd", "osd")
-    sink      = Gst.ElementFactory.make("fakesink", "sink")
+    nvosd = Gst.ElementFactory.make("nvdsosd", "osd")
+    sink = Gst.ElementFactory.make("fakesink", "sink")
     sink.set_property("sync", False)
 
-    for e in [srcbin, streammux, pgie, nvvidconv, nvosd, sink]:
+    for e in [udbin, q_pre, vconv, nvconv, to_nvmm, mux, pgie, nvvidconv, nvosd, sink]:
         if not e:
             print("Failed to create an element"); return
 
-    pipeline.add(srcbin); pipeline.add(streammux); pipeline.add(pgie)
-    pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
+    pipeline.add(udbin)
+    pipeline.add(q_pre); pipeline.add(vconv); pipeline.add(nvconv); pipeline.add(to_nvmm)
+    pipeline.add(mux); pipeline.add(pgie); pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
 
-    srcbin.connect("pad-added", src_pad_added, streammux)
-    if not streammux.link(pgie): print("link mux->pgie failed"); return
+    # Static links for the preproc and downstream chain
+    if not q_pre.link(vconv): print("link preq->vconv failed"); return
+    if not vconv.link(nvconv): print("link vconv->nvconv failed"); return
+    if not nvconv.link(to_nvmm): print("link nvconv->to_nvmm failed"); return
+    if not mux.link(pgie): print("link mux->pgie failed"); return
     if not pgie.link(nvvidconv): print("link pgie->conv failed"); return
     if not nvvidconv.link(nvosd): print("link conv->osd failed"); return
     if not nvosd.link(sink): print("link osd->sink failed"); return
+
+    # Link NVMM output to nvstreammux sink_0 once, up front
+    mux_sink = mux.get_request_pad("sink_0")
+    srcpad = to_nvmm.get_static_pad("src")
+    if not mux_sink or not srcpad or srcpad.link(mux_sink) != Gst.PadLinkReturn.OK:
+        print("Failed to link to_nvmm -> nvstreammux sink_0"); return
+
+    # Dynamic: connect raw video pad later to queue
+    udbin.connect("pad-added", on_pad_added, q_pre)
 
     loop = GLib.MainLoop()
     bus = pipeline.get_bus(); bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
 
-    print("Starting pipeline")
+    print("Starting pipeline (SW decode)")
     pipeline.set_state(Gst.State.PLAYING)
     try: loop.run()
     except KeyboardInterrupt: pass
