@@ -1,3 +1,0 @@
-wget -O ngccli_linux.zip https://ngc.nvidia.com/downloads/ngccli_linux.zip
-unzip ngccli_linux.zip
-chmod u+x ngc-cli/ngc

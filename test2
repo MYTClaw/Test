@@ -1,0 +1,86 @@
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GLib
+import sys
+
+def pad_added_handler(src, new_pad, depay):
+    caps = new_pad.get_current_caps()
+    if caps:
+        structure = caps.get_structure(0)
+        if structure.get_name() == 'application/x-rtp':
+            sink_pad = depay.get_static_pad('sink')
+            if not sink_pad.is_linked():
+                new_pad.link(sink_pad)
+
+def bus_call(bus, message, loop):
+    t = message.type
+    if t == Gst.MessageType.EOS:
+        print("End-of-stream")
+        loop.quit()
+    elif t == Gst.MessageType.ERROR:
+        err, debug = message.parse_error()
+        print(f"Error: {err}, {debug}")
+        loop.quit()
+    return True
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 script.py <rtsp_uri>")
+        sys.exit(1)
+
+    rtsp_uri = sys.argv[1]
+
+    Gst.init(None)
+
+    pipeline = Gst.Pipeline()
+    if not pipeline:
+        print("Unable to create Pipeline")
+        return
+
+    source = Gst.ElementFactory.make("rtspsrc", "rtsp-source")
+    source.set_property("location", rtsp_uri)
+
+    depay = Gst.ElementFactory.make("rtph264depay", "rtp-depay")
+
+    parse = Gst.ElementFactory.make("h264parse", "h264-parse")
+
+    decoder = Gst.ElementFactory.make("nvv4l2decoder", "nv-decoder")  # NVIDIA hardware decoder from DeepStream
+
+    sink = Gst.ElementFactory.make("fakesink", "fake-sink")
+    sink.set_property("sync", False)  # Run as fast as possible, no sync to clock
+
+    if not all([source, depay, parse, decoder, sink]):
+        print("Not all elements could be created.")
+        return
+
+    pipeline.add(source)
+    pipeline.add(depay)
+    pipeline.add(parse)
+    pipeline.add(decoder)
+    pipeline.add(sink)
+
+    # Link elements except source, which has dynamic pads
+    depay.link(parse)
+    parse.link(decoder)
+    decoder.link(sink)
+
+    # Connect pad-added signal for dynamic linking
+    source.connect("pad-added", pad_added_handler, depay)
+
+    loop = GLib.MainLoop()
+    bus = pipeline.get_bus()
+    bus.add_signal_watch()
+    bus.connect("message", bus_call, loop)
+
+    print("Starting pipeline")
+    pipeline.set_state(Gst.State.PLAYING)
+
+    try:
+        loop.run()
+    except:
+        pass
+
+    pipeline.set_state(Gst.State.NULL)
+
+if __name__ == '__main__':
+    main()
