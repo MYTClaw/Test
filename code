@@ -23,76 +23,89 @@ def bus_call(bus, message, loop):
     return True
 
 def main():
-    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"  # EDIT
-    cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"  # EDIT
+    rtsp_uri = "rtsp://user:pass@HOST:PORT/PATH"       # EDIT [29]
+    cfg_path = "/home/ubuntu/people-detection/config_infer_primary_trafficcamnet.txt"  # EDIT [1]
 
     Gst.init(None)
     pipeline = Gst.Pipeline.new("rtsp-ds-swdec-explicit")
 
-    # RTSP source (force TCP, latency, keep-alive)
+    # RTSP source; force TCP, add latency and keep-alive [29]
     source = Gst.ElementFactory.make("rtspsrc", "src")
-    source.set_property("location", rtsp_uri)
-    source.set_property("protocols", "tcp")            # RTP over TCP
-    source.set_property("latency", 300)                # 200–500 typical
-    source.set_property("do-rtsp-keep-alive", True)    # GET_PARAMETER keep-alive
+    source.set_property("location", rtsp_uri)                          # [29]
+    source.set_property("protocols", "tcp")                            # [29]
+    source.set_property("latency", 300)                                # [29]
+    source.set_property("do-rtsp-keep-alive", True)                    # [29]
 
     depay  = Gst.ElementFactory.make("rtph264depay", "depay")
     parse  = Gst.ElementFactory.make("h264parse", "parse")
-    swdec  = Gst.ElementFactory.make("avdec_h264", "swdec")   # software decoder
-    vconv  = Gst.ElementFactory.make("videoconvert", "vconv") # CPU color
-    nvconv = Gst.ElementFactory.make("nvvideoconvert", "nvconv")
+    swdec  = Gst.ElementFactory.make("avdec_h264", "swdec")            # [30]
+
+    q1 = Gst.ElementFactory.make("queue", "q1")
+    vconv  = Gst.ElementFactory.make("videoconvert", "vconv")          # CPU color [17]
+    q2 = Gst.ElementFactory.make("queue", "q2")
+    nvconv = Gst.ElementFactory.make("nvvideoconvert", "nvconv")       # To NVMM [17]
+    # Safer conversion path on Jetson:
+    nvconv.set_property("nvbuf-memory-type", 4)       # surface-array (Jetson) [6]
+    nvconv.set_property("compute-hw", 1)              # GPU compute path [10]
+    nvconv.set_property("copy-hw", 2)                 # Copy using VIC [10]
+
     to_nvmm = Gst.ElementFactory.make("capsfilter", "to-nvmm")
-    to_nvmm.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM), format=NV12"))
+    to_nvmm.set_property("caps",
+        Gst.Caps.from_string("video/x-raw(memory:NVMM), format=NV12")) # [17]
 
     mux = Gst.ElementFactory.make("nvstreammux", "mux")
-    mux.set_property("batch-size", 1)
-    mux.set_property("live-source", 1)
-    mux.set_property("width", 1280)
-    mux.set_property("height", 720)
+    mux.set_property("batch-size", 1)                                  # [27]
+    mux.set_property("live-source", 1)                                 # [27]
+    mux.set_property("width", 1280)                                    # [27]
+    mux.set_property("height", 720)                                    # [27]
+    mux.set_property("nvbuf-memory-type", 4)                           # surface-array [6]
 
     pgie = Gst.ElementFactory.make("nvinfer", "pgie")
-    pgie.set_property("config-file-path", cfg_path)
+    pgie.set_property("config-file-path", cfg_path)                    # [1]
 
-    nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "conv")
-    nvosd     = Gst.ElementFactory.make("nvdsosd", "osd")
-    sink      = Gst.ElementFactory.make("fakesink", "sink")
+    nvpost = Gst.ElementFactory.make("nvvideoconvert", "postconv")
+    nvpost.set_property("nvbuf-memory-type", 4)                        # [6]
+    nvosd = Gst.ElementFactory.make("nvdsosd", "osd")
+    sink  = Gst.ElementFactory.make("fakesink", "sink")
     sink.set_property("sync", False)
 
-    for e in [source, depay, parse, swdec, vconv, nvconv, to_nvmm, mux, pgie, nvvidconv, nvosd, sink]:
+    for e in [source, depay, parse, swdec, q1, vconv, q2, nvconv, to_nvmm,
+              mux, pgie, nvpost, nvosd, sink]:
         if not e:
             print("Failed to create an element"); return
 
     pipeline.add(source); pipeline.add(depay); pipeline.add(parse); pipeline.add(swdec)
-    pipeline.add(vconv); pipeline.add(nvconv); pipeline.add(to_nvmm)
-    pipeline.add(mux); pipeline.add(pgie); pipeline.add(nvvidconv); pipeline.add(nvosd); pipeline.add(sink)
+    pipeline.add(q1); pipeline.add(vconv); pipeline.add(q2); pipeline.add(nvconv); pipeline.add(to_nvmm)
+    pipeline.add(mux); pipeline.add(pgie); pipeline.add(nvpost); pipeline.add(nvosd); pipeline.add(sink)
 
-    # Static links (up to NVMM)
+    # Static links up to NVMM
     if not depay.link(parse): print("link depay->parse failed"); return
     if not parse.link(swdec): print("link parse->swdec failed"); return
-    if not swdec.link(vconv): print("link swdec->vconv failed"); return
-    if not vconv.link(nvconv): print("link vconv->nvconv failed"); return
+    if not swdec.link(q1): print("link swdec->q1 failed"); return
+    if not q1.link(vconv): print("link q1->vconv failed"); return
+    if not vconv.link(q2): print("link vconv->q2 failed"); return
+    if not q2.link(nvconv): print("link q2->nvconv failed"); return
     if not nvconv.link(to_nvmm): print("link nvconv->to_nvmm failed"); return
 
-    # Link NVMM to nvstreammux sink_0
-    mux_sink = mux.get_request_pad("sink_0")
+    # Link NVMM to mux sink_0
+    mux_sink = mux.get_request_pad("sink_0")                            # [2]
     srcpad = to_nvmm.get_static_pad("src")
     if not mux_sink or not srcpad or srcpad.link(mux_sink) != Gst.PadLinkReturn.OK:
         print("Failed to link to_nvmm -> nvstreammux sink_0"); return
 
-    # Downstream DS chain
+    # Downstream
     if not mux.link(pgie): print("link mux->pgie failed"); return
-    if not pgie.link(nvvidconv): print("link pgie->conv failed"); return
-    if not nvvidconv.link(nvosd): print("link conv->osd failed"); return
+    if not pgie.link(nvpost): print("link pgie->postconv failed"); return
+    if not nvpost.link(nvosd): print("link postconv->osd failed"); return
     if not nvosd.link(sink): print("link osd->sink failed"); return
 
-    # Dynamic RTSP pad hookup
-    source.connect("pad-added", on_rtspsrc_pad, depay)
+    source.connect("pad-added", on_rtspsrc_pad, depay)                  # [29]
 
     loop = GLib.MainLoop()
     bus = pipeline.get_bus(); bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
 
-    print("Starting pipeline (explicit SW decode)")
+    print("Starting pipeline (explicit SW decode + safe NVMM)")
     pipeline.set_state(Gst.State.PLAYING)
     try: loop.run()
     except KeyboardInterrupt: pass
