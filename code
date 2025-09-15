@@ -1,0 +1,119 @@
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GLib
+import sys
+
+def pad_added_handler(src, new_pad, depay):
+    caps = new_pad.get_current_caps()
+    if caps:
+        structure = caps.get_structure(0)
+        if structure.get_name() == 'application/x-rtp':
+            sink_pad = depay.get_static_pad('sink')
+            if sink_pad and not sink_pad.is_linked():
+                new_pad.link(sink_pad)
+
+def bus_call(bus, message, loop):
+    t = message.type
+    if t == Gst.MessageType.EOS:
+        print("End-of-stream")
+        loop.quit()
+    elif t == Gst.MessageType.ERROR:
+        err, debug = message.parse_error()
+        print(f"Error: {err}, {debug}")
+        loop.quit()
+    return True
+
+def main():
+    if len(sys.argv) not in (2,3):
+        print("Usage: python3 script.py <rtsp_uri> [pgie_config_path]")
+        sys.exit(1)
+
+    rtsp_uri = sys.argv[21]
+    # Default to the suggested config path if not provided
+    pgie_config = sys.argv[24] if len(sys.argv) == 3 else \
+        "/opt/nvidia/deepstream/deepstream-7.1/samples/configs/config_infer_primary_trafficcamnet.txt"
+
+    Gst.init(None)
+    pipeline = Gst.Pipeline.new("rtsp-ds-pipeline")
+    if not pipeline:
+        print("Unable to create Pipeline")
+        sys.exit(1)
+
+    source = Gst.ElementFactory.make("rtspsrc", "rtsp-source")
+    source.set_property("location", rtsp_uri)
+    # Optional RTSP tuning:
+    # source.set_property("latency", 200)
+    # source.set_property("drop-on-latency", True)
+
+    depay   = Gst.ElementFactory.make("rtph264depay", "rtp-depay")
+    parse   = Gst.ElementFactory.make("h264parse", "h264-parse")
+    decoder = Gst.ElementFactory.make("nvv4l2decoder", "nv-decoder")
+
+    streammux = Gst.ElementFactory.make("nvstreammux", "stream-muxer")
+    streammux.set_property("batch-size", 1)
+    streammux.set_property("live-source", 1)
+
+    pgie = Gst.ElementFactory.make("nvinfer", "primary-infer")
+    pgie.set_property("config-file-path", pgie_config)
+
+    nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "nvvidconv")
+    nvosd     = Gst.ElementFactory.make("nvdsosd", "onscreendisplay")
+
+    sink = Gst.ElementFactory.make("fakesink", "fake-sink")
+    sink.set_property("sync", False)
+
+    for e in [source, depay, parse, decoder, streammux, pgie, nvvidconv, nvosd, sink]:
+        if not e:
+            print("Failed to create one or more GStreamer elements")
+            sys.exit(1)
+
+    pipeline.add(source)
+    pipeline.add(depay)
+    pipeline.add(parse)
+    pipeline.add(decoder)
+    pipeline.add(streammux)
+    pipeline.add(pgie)
+    pipeline.add(nvvidconv)
+    pipeline.add(nvosd)
+    pipeline.add(sink)
+
+    # Static links before decoder
+    if not depay.link(parse):
+        print("Failed to link depay->parse"); sys.exit(1)
+    if not parse.link(decoder):
+        print("Failed to link parse->decoder"); sys.exit(1)
+
+    # Link decoder -> nvstreammux via request pad sink_0
+    dec_src_pad = decoder.get_static_pad("src")
+    mux_sink_pad = streammux.get_request_pad("sink_0")
+    if not dec_src_pad or not mux_sink_pad or dec_src_pad.link(mux_sink_pad) != Gst.PadLinkReturn.OK:
+        print("Failed to link decoder to nvstreammux sink_0"); sys.exit(1)
+
+    # Downstream: mux -> nvinfer -> nvvideoconvert -> nvdsosd -> sink
+    if not streammux.link(pgie):
+        print("Failed to link streammux->nvinfer"); sys.exit(1)
+    if not pgie.link(nvvidconv):
+        print("Failed to link nvinfer->nvvideoconvert"); sys.exit(1)
+    if not nvvidconv.link(nvosd):
+        print("Failed to link nvvideoconvert->nvdsosd"); sys.exit(1)
+    if not nvosd.link(sink):
+        print("Failed to link nvdsosd->sink"); sys.exit(1)
+
+    # RTSP dynamic pad to depay
+    source.connect("pad-added", pad_added_handler, depay)
+
+    loop = GLib.MainLoop()
+    bus = pipeline.get_bus()
+    bus.add_signal_watch()
+    bus.connect("message", bus_call, loop)
+
+    print("Starting pipeline")
+    pipeline.set_state(Gst.State.PLAYING)
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+    pipeline.set_state(Gst.State.NULL)
+
+if __name__ == '__main__':
+    main()
