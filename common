@@ -1,0 +1,2 @@
+echo 'export PYTHONPATH="${PYTHONPATH}:/opt/nvidia/deepstream/deepstream-7.1/sources/apps/sample_apps/deepstream-3d-lidar-sensor-fusion/python/triton_lmm/common"' >> ~/.bashrc
+source ~/.bashrc
