@@ -1,0 +1,2 @@
+export http_proxy="http://10.3.254.10:8080"
+export https_proxy="http://10.3.254.10:8080"
