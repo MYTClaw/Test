@@ -182,7 +182,7 @@ def main():
     global total_people_detected, total_vehicles_detected
     global facility_id, zone_id, device_id # Declare globals (facility and zone not used in send)
     # Load JSON config
-    config_path = "/home/nano_anarr/facility_config.json"
+    config_path = "/home/ubuntu/facility_config.json"
     try:
         with open(config_path, 'r') as f:
             config_data = json.load(f)
@@ -199,7 +199,7 @@ def main():
         sys.stderr.write("No devices found in config\n")
         sys.exit(1)
     # Start persistent WebSocket thread
-    ws_uri = "ws://192.168.0.168:3001/edge" # Replace with your WS server URI
+    ws_uri = "ws://localhost:3001/edge" # Replace with your WS server URI
     start_ws_thread(ws_uri)
   
     print("=== PEOPLE COUNTER (RTSP INPUT to RTSP OUTPUT) ===")
@@ -249,7 +249,7 @@ def main():
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
   
-    pgie.set_property("config-file-path", "/opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_infer_primary.txt")
+    pgie.set_property("config-file-path", "/opt/nvidia/deepstream/deepstream-7.1/samples/configs/deepstream-app/config_infer_primary.txt")
   
     tiler.set_property("rows", 1)
     tiler.set_property("columns", 1)
