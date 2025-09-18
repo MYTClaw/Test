@@ -1,0 +1,29 @@
+import requests
+
+# Base URL (replace with your server address if needed)
+base_url = "http://localhost:3000"  # change this to your API server
+
+# API endpoint
+endpoint = "/api/download-zip?hostname=ubuntu&macAddress=3c%3A6d%3A66%3A0f%3A2e%3A67"
+
+# Full URL
+url = f"{base_url}{endpoint}"
+
+# Output file path
+output_file = "downloaded_file.zip"
+
+try:
+    print(f"Downloading from {url} ...")
+    response = requests.get(url, stream=True)
+    response.raise_for_status()  # raise exception if request failed
+
+    # Save content in chunks
+    with open(output_file, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+
+    print(f"Download complete. File saved as {output_file}")
+
+except requests.exceptions.RequestException as e:
+    print(f"Error downloading file: {e}")
