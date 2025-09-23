@@ -1,3 +1,6 @@
+ffmpeg -i "rtsp://username:password@ip:port/stream" -c copy -t 60 output.mp4
+
+
 import cv2
 
 def record_rtsp(rtsp_url, output_file="output.mp4", duration=30):
