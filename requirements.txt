@@ -1,4 +1,0 @@
-msal
-python-dotenv
-requests
-aiosmtpd
