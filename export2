@@ -1,2 +1,0 @@
-export HTTP_PROXY="http://10.3.254.10:8080"
-export HTTPS PROXY="http://10.3.254.10:8080"
